@@ -1,5 +1,7 @@
 # Replication: *Democratizing Optimization with Generative AI* (Simchi-Levi, Dai, Menache, Wu; SSRN 5511218, v. 30 Sep 2026)
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Priyanshi8806/democratizing-optimization-replication/blob/main/replication_colab.ipynb)
+
 This is a perspective paper. It has no estimation and no public data. This repository reproduces the parts that can be reproduced:
 
 | Paper element | Here | Status |
@@ -25,6 +27,7 @@ ollama pull qwen2.5:7b-instruct          # ~4.7 GB; use qwen2.5:3b-instruct on a
 ollama serve                              # usually already running as a service
 python scripts/demo.py --llm             # 4I walkthrough -> results/demo_transcript_llm.md
 python scripts/run_benchmark.py --backend llm --model qwen2.5:7b-instruct
+python scripts/run_benchmark.py --backend llm --model llama3.1:8b
 python scripts/chat.py                    # interactive; :commit <reason>, :log, :facts
 ```
 Any OpenAI-compatible server works, e.g. vLLM on an HPC node:
