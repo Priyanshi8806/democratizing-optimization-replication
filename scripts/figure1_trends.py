@@ -30,12 +30,23 @@ STYLE = {  # mimic the paper's line styles
 }
 
 
-def fetch() -> pd.DataFrame:
+def fetch(max_tries: int = 5) -> pd.DataFrame:
+    """pytrends' built-in retry passes `method_whitelist`, which urllib3 >= 2 removed (TypeError).
+    So we disable it (retries=0, backoff_factor=0) and retry ourselves on 429 rate limits."""
+    import time
     from pytrends.request import TrendReq
-    py = TrendReq(hl="en-US", tz=0, retries=3, backoff_factor=1.0)
-    py.build_payload(TERMS, timeframe=TIMEFRAME, geo="US")
-    df = py.interest_over_time().drop(columns=["isPartial"], errors="ignore")
-    return df
+    last = None
+    for i in range(max_tries):
+        try:
+            py = TrendReq(hl="en-US", tz=0, retries=0, backoff_factor=0, timeout=(10, 30))
+            py.build_payload(TERMS, timeframe=TIMEFRAME, geo="US")
+            return py.interest_over_time().drop(columns=["isPartial"], errors="ignore")
+        except Exception as e:  # TooManyRequestsError (429) or transient network errors
+            last = e
+            wait = 20 * (i + 1)
+            print(f"Trends request failed ({type(e).__name__}); retry {i + 1}/{max_tries} in {wait}s")
+            time.sleep(wait)
+    raise RuntimeError(f"Google Trends unavailable after {max_tries} tries: {last}. Use the manual CSV route.")
 
 
 def read_csv(path) -> pd.DataFrame:
