@@ -110,3 +110,69 @@ def test_assistant_commit_changelog():
     a = A.ask("What if supplier S3 becomes unavailable?")
     entry = A.commit("plant shutdown")
     assert entry["new_cost"] == a.solution.objective and A.inst.inventory["S3"] == 0 and len(A.changelog) == 1
+
+
+# ---------------------------------------------------------------- multi-agent system
+def test_multi_agent_routes_and_approval_loop():
+    from genai_opt.agents import MultiAgentSystem
+    M = MultiAgentSystem(generate(seed=0))
+    assert M.ask("Where do we stand as of today?").route == "insight"
+    r = M.ask("Why is S2 not used for d1?")
+    assert r.route == "interpretability" and "680.65" in r.text
+    r = M.ask("What if supplier S3 becomes unavailable?")
+    assert r.route == "interactivity" and M.changelog == []          # what-if never commits
+    r = M.ask("Supplier S1 is down, update the plan.")
+    assert r.status == "needs_approval" and M.changelog == []        # big change -> human gate
+    assert M.ask("no").status == "rejected" and M.changelog == []
+    M.ask("Supplier S1 is down, update the plan.")
+    r = M.ask("yes")
+    assert len(M.changelog) == 1 and M.state.inst.inventory["S1"] == 0
+
+
+def test_multi_agent_auto_apply_small_change_and_handoff():
+    from genai_opt.agents import MultiAgentSystem
+    M = MultiAgentSystem(generate(seed=0))
+    M.ask("Can demand d3 dock at least one week earlier than the current plan?")
+    r = M.ask("apply that")
+    assert r.route == "improvisation" and len(M.changelog) == 1      # 1% impact -> auto-applied
+    r = M.ask("What if demand d1 must be fulfilled by supplier S9?")
+    assert r.status == "out_of_scope" and "S9" in r.text
+
+
+def test_validator_catches_bad_plan():
+    from genai_opt.agents.base import SharedState, Trace
+    from genai_opt.agents.specialists import ExecutorAgent, ValidatorAgent
+    st = SharedState(generate(seed=0))
+    sc, sol = ExecutorAgent(st).run({"action": "supplier_unavailable", "args": {"supplier": "S3"}}, Trace())
+    d = next(d for d, a in sol.assignment.items() if a)
+    l, t, s = sol.assignment[d]
+    sc.inst.inventory[s] = 0                                          # tamper: plan now violates (6)
+    assert not ValidatorAgent(st).check_plan(sc, sol, Trace())["ok"]
+
+
+def test_multi_agent_llm_path_handoff_and_rejected_narration():
+    """Fake LLM: router mis-routes a 'why' question; planner's action triggers a hand-off;
+    the narration invents a number, so the Validator makes the Explainer fall back to the template."""
+    from genai_opt.agents import MultiAgentSystem
+
+    class Fake:
+        model, name = "fake", "fake"
+
+        def chat(self, msgs, json_mode=True):
+            sysmsg = msgs[0]["content"]
+            if sysmsg.startswith("You route"):
+                return '{"route": "interactivity"}'
+            return '{"action": "why_not_supplier", "args": {"demand": "d1", "supplier": "S2"}}'
+
+        def parse(self, q, inst):
+            import json
+            return json.loads(self.chat([{"role": "system", "content": "x"}]))
+
+        def narrate(self, q, facts):
+            return "It would cost 99999 more."
+
+    M = MultiAgentSystem(generate(seed=0), llm=Fake())
+    r = M.ask("why not S2 for d1")
+    acts = [s.action for s in r.trace.steps]
+    assert r.route == "interpretability" and any("hand-off" in a for a in acts)
+    assert any("rejected" in a for a in acts) and "99999" not in r.text

@@ -33,6 +33,23 @@ python scripts/chat.py                    # interactive; :commit <reason>, :log,
 Any OpenAI-compatible server works, e.g. vLLM on an HPC node:
 `--base-url http://<node>:8000/v1 --model Qwen/Qwen2.5-7B-Instruct` (or set `LLM_BASE_URL` and `LLM_MODEL`).
 
+## Multi-agent 4I system (`genai_opt/agents/`)
+```
+message ─► Router ─► Insight            state snapshot
+                 ├─► Interpretability   Planner → Executor (counterfactual) → Validator → Explainer
+                 ├─► Interactivity      Planner → Executor → Validator → Explainer        (what-if, never commits)
+                 └─► Improvisation      Planner → Executor → Validator → approval gate → commit + change log
+```
+* LLM agents (Router, Planner, Explainer) use Qwen / Llama via Ollama. Each has a rule-based fallback, so the system runs with no LLM.
+* The Executor (HiGHS) and Validator (constraint and fidelity checks) never use an LLM. This follows the paper's "GenAI translates, solver verifies" design.
+* Improvisation auto-applies validated changes with ≤5% cost impact. Larger ones wait for `yes` or `no`.
+* If an agent receives a request that belongs to another one, it hands the request off (e.g. a "why not" question sent to Interactivity).
+```bash
+python scripts/multi_agent.py                         # no LLM
+python scripts/multi_agent.py --llm                   # Qwen 2.5 7B
+python scripts/multi_agent.py --llm --model llama3.1:8b --chat
+```
+
 ## Design (mirrors the paper's division of labour)
 ```
 question ─LLM/rules─▶ ONE action from a fixed catalog (JSON) ─validate─▶ model edit ─HiGHS─▶ solution
