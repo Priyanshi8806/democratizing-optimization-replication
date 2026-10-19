@@ -1,0 +1,40 @@
+{
+  "backend": "llm:qwen2.5:7b-instruct",
+  "ID": {
+    "n_questions": 90,
+    "question_acc": 1.0,
+    "e2e_acc": 1.0,
+    "set_acc": 1.0,
+    "median_parse_s": 5.1726,
+    "acc_by_type": {
+      "datacenter_unavailable": 1.0,
+      "dock_earlier": 1.0,
+      "explain_assignment": 1.0,
+      "force_supplier": 1.0,
+      "scale_shipping_cost": 1.0,
+      "scale_throughput": 1.0,
+      "status_summary": 1.0,
+      "supplier_unavailable": 1.0,
+      "why_not_supplier": 1.0
+    }
+  },
+  "OOD": {
+    "n_questions": 100,
+    "question_acc": 1.0,
+    "e2e_acc": 1.0,
+    "set_acc": 1.0,
+    "median_parse_s": 5.9437,
+    "acc_by_type": {
+      "datacenter_unavailable": 1.0,
+      "dock_earlier": 1.0,
+      "explain_assignment": 1.0,
+      "force_supplier": 1.0,
+      "out_of_scope": 1.0,
+      "scale_shipping_cost": 1.0,
+      "scale_throughput": 1.0,
+      "status_summary": 1.0,
+      "supplier_unavailable": 1.0,
+      "why_not_supplier": 1.0
+    }
+  }
+}

@@ -23,7 +23,7 @@
     "question_acc": 0.15,
     "e2e_acc": 0.15,
     "set_acc": 0.0,
-    "median_parse_s": 0.0001,
+    "median_parse_s": 0.0,
     "acc_by_type": {
       "datacenter_unavailable": 0.0,
       "dock_earlier": 0.0,
