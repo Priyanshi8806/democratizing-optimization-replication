@@ -1,1 +1,86 @@
+name: Run replication (Qwen + Llama)
 
+# Click "Run workflow" in the Actions tab. Runs on GitHub's free servers (CPU, ~1-2 h),
+# then saves everything in results/ back into the repo.
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: "Ollama models to run (space-separated)"
+        default: "qwen2.5:7b-instruct llama3.1:8b"
+      sets:
+        description: "Benchmark question sets per split (10 = full 190 questions)"
+        default: "10"
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python packages and run tests
+        run: |
+          pip install -q -r requirements.txt
+          python -m pytest -q tests
+
+      - name: Install Ollama and download models
+        run: |
+          sudo apt-get -qq install -y zstd > /dev/null
+          curl -fsSL https://ollama.com/install.sh | sh
+          (ollama serve > /tmp/ollama.log 2>&1 &) || true
+          sleep 8
+          for m in ${{ github.event.inputs.models }}; do ollama pull "$m"; done
+          ollama list
+
+      - name: Benchmark - rules (no LLM)
+        run: python scripts/run_benchmark.py --backend rules --sets ${{ github.event.inputs.sets }}
+
+      - name: Multi-agent + benchmark for each model
+        run: |
+          for m in ${{ github.event.inputs.models }}; do
+            echo "::group::multi-agent $m"
+            python scripts/multi_agent.py --llm --model "$m"
+            echo "::endgroup::"
+            echo "::group::benchmark $m"
+            python scripts/run_benchmark.py --backend llm --model "$m" --sets ${{ github.event.inputs.sets }}
+            echo "::endgroup::"
+          done
+
+      - name: Summary table
+        if: always()
+        run: |
+          python - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import json, glob
+          print("| backend | split | question acc | set acc | median parse s |\n|---|---|---|---|---|")
+          for f in sorted(glob.glob("results/bench_*_summary.json")):
+              s = json.load(open(f))
+              for sp in ("ID", "OOD"):
+                  r = s[sp]
+                  print(f"| {s['backend']} | {sp} | {r['question_acc']} | {r['set_acc']} | {r['median_parse_s']} |")
+          PY
+
+      - name: Save results to the repo
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add results
+          git commit -m "Results from GitHub Actions run ${{ github.run_number }}" || echo "nothing to commit"
+          git pull --rebase -q && git push
+
+      - name: Upload results as a download
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results
+          path: |
+            results
+            /tmp/ollama.log
